@@ -111,17 +111,14 @@
         </section>
         <section>
           <div class="nes-container with-title">
-            <p class="title">Map File</p>
-            <label class="nes-btn is-primary">
-              <span>Select</span>
-              <input
-                id="map-file"
-                type="file"
-                onchange="handleFiles(this.files, this.id)"
-                multiple
-              />
-            </label>
-            <span id="map-file-name"></span>
+            <p class="title">URLs</p>
+            <textarea
+              id="map-urls"
+              cols="30"
+              rows="10"
+              onchange="handleUrls(this.value)"
+            ></textarea>
+            <span id="map-url-count"></span>
           </div>
         </section>
         <section>
@@ -189,26 +186,26 @@
     <script>
       dialogPolyfill.registerDialog(document.querySelector("dialog"));
 
-      let mapFiles = null;
+      let mapUrls = null;
       let download = document.createElement("a");
 
-      function handleFiles(files, id) {
-        mapFiles = [...files];
-        previewName = mapFiles[0].name;
-        if (files.length > 1) {
-          previewName += ` & ${files.length - 1} others`
-        }
-        document.getElementById("map-file-name").textContent = previewName
-        if (mapFiles !== null) {
-          document
-            .getElementById("explode-button")
-            .classList.remove("is-disabled");
-        } else {
-          document
-            .getElementById("explode-button")
-            .classList.add("is-disabled");
-        }
+      async function fetchFile(url) {
+        const response = await fetch(url);
+        const text = await response.text();
+        return new Blob([text], { type: "application/javascript" });
       }
+
+      async function handleUrls(urlString) {
+        const urls = urlString.split("\n").map(url => url.trim()).filter(Boolean);
+          mapUrls = await Promise.all(urls.map(fetchFile));
+          const previewCount = mapUrls.length;
+          document.getElementById("map-url-count").textContent = `Total URLS: ${previewCount}`;
+          if (mapUrls.length > 0) {
+            document.getElementById("explode-button").classList.remove("is-disabled");
+          } else {
+            document.getElementById("explode-button").classList.add("is-disabled");
+          }
+        }
 
       function resetProgress() {
         document.getElementById("explode-button").style.display =
@@ -219,7 +216,8 @@
         document.getElementById("progress-bar").style.display = "none";
         document.getElementById("progress-bar").value = "0";
         document.getElementById("map-file-name").textContent = "";
-        mapFiles = null;
+        document.getElementById("map-url-count").textContent = "";
+        mapUrls = null;
       }
 
       function unpackFile(mapFile) {
@@ -251,11 +249,16 @@
       }
 
       function unpackFiles() {
-        if (mapFiles !== null) {
+        if (mapUrls !== null) {
           document.getElementById("explode-button").style.display = "none";
           document.getElementById("progress-bar").style.display = "inline-block";
-          let unpackedPromises = mapFiles.map(
-            file => unpackFile(file)
+          let unpackedPromises = mapUrls.map(
+            (file, idx) => unpackFile(file)
+              .then(res => res)
+              .catch((err) => {
+                err.mapFile = urls[idx];
+                throw err;
+              })
           );
           Promise.all(unpackedPromises).then((res) => {
             let zip = new JSZip();
